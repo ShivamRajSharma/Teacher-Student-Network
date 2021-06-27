@@ -1,0 +1,6 @@
+__pycache__
+model
+*.bin
+input
+*.png
+*.jpg
