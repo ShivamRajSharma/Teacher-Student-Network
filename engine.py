@@ -3,7 +3,9 @@ import random
 import torch.nn as nn
 from tqdm import tqdm
 
-def cse_loss(student_out, teacher_out):     
+def cse_loss(student_out, teacher_out):
+    student_out = torch.softmax(student_out, dim=-1)
+    teacher_out = torch.softmax(teacher_out, dim=-1)
     return -(teacher_out*torch.log(student_out)).sum(dim=1).mean()
 
 def t_n_s_loss_fn(t_out_1, t_out_2, t_out_4, s_out_1, s_out_2, s_out_4, labels):
@@ -14,7 +16,7 @@ def t_n_s_loss_fn(t_out_1, t_out_2, t_out_4, s_out_1, s_out_2, s_out_4, labels):
     else:
         # cce_l = cse_loss(s_out_4, t_out_4)
 
-        cce_l = nn.KLDivLoss()(s_out_4, t_out_4)
+        cce_l = cse_loss(s_out_4, t_out_4)
     
     return (mse_l_1 + mse_l_2 + cce_l)/3
 
