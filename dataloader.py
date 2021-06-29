@@ -13,7 +13,9 @@ class DataLoader(torch.utils.data.Dataset):
         img = self.imgs[idx]
         label = self.labels[idx]
         img = self.transforms(image=img)["image"]
+        img = torch.tensor(img, dtype=torch.float)
+        img = img.permute(2, 0, 1)
         return {
-            "image": torch.tensor(img, dtype=torch.float),
-            "label": torch.tensor(label, dtype=torch.float)
+            "image": img,
+            "label": torch.tensor(label, dtype=torch.long)
         }

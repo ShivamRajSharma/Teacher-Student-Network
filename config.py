@@ -6,8 +6,8 @@ input_data = "input/"
 cifar100_mean = (0.5071, 0.4867, 0.4408)
 cifar100_std = (0.2675, 0.2565, 0.2761)
 
-Epochs = 30
-Batch_Size = 32
+Epochs = 10
+Batch_Size = 64
 lr = 1e-3
 warmup_stes=0.2
 

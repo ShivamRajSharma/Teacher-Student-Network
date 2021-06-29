@@ -9,13 +9,11 @@ import torch.nn as nn
 import pickle
 from tensorflow.keras.datasets import cifar100
 import albumentations as alb
-import torchvision
+# import torchvision
 from sklearn.model_selection import train_test_split
 
 def run():
-    x, y = cifar100.load_data()
-
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.3, stratify=True)
+    (x_train, y_train), (x_test, y_test) = cifar100.load_data()
 
     train_transforms = alb.Compose([
         alb.Normalize(config.cifar100_mean, config.cifar100_std),
@@ -27,12 +25,12 @@ def run():
         alb.Normalize(config.cifar100_mean, config.cifar100_std)
     ])
 
-    train_data = dataloader.DataLoader()
+    train_data = dataloader.DataLoader(x_train, y_train, train_transforms)
 
-    val_loader = dataloader.DataLoader()
+    val_data = dataloader.DataLoader(x_test, y_test, val_transforms)
 
     train_loader = torch.utils.data.DataLoader(
-        train_loader,
+        train_data,
         batch_size=config.Batch_Size,
         num_workers=4,
         shuffle=True,
@@ -40,16 +38,16 @@ def run():
     )
 
     val_loader = torch.utils.data.DataLoader(
-        val_loader,
+        val_data,
         batch_size=config.Batch_Size,
         num_workers=4,
         pin_memory=True
     )
 
-    teachers_model = TeacherStudentNetwork.Teacher(
+    teacher_model = TeacherStudentNetwork.Teacher(
         in_channels=config.in_channels,
         out_channels=config.out_channels,
-        num_conv=config.teacher_num_conv,
+        num_conv=config.num_conv,
         num_classes=config.num_classes,
         dropout=config.dropout
     )
@@ -104,32 +102,32 @@ def run():
     students_val_acc = []
     students_val_loss = []
 
-    print('--------- [INFO] STARTING TEACHERS TRAINING ---------')
-    for epoch in range(CONFIG.Epochs):
-        train_accuracy, train_loss = engine.train_fn(teachers_model, train_loader, teacher_optimizer, teacher_scheduler, device)
-        val_accuracy, val_loss = engine.eval_fn(teacher_model, val_loader, device)
-        teachers_train_acc.append(train_accuracy)
-        teachers_train_loss.append(train_loss)
-        teachers_val_acc.append(val_accuracy)
-        teachers_val_loss.append(val_loss)
+    # print('--------- [INFO] STARTING TEACHERS TRAINING ---------')
+    # for epoch in range(config.Epochs):
+    #     train_accuracy, train_loss = engine.train_fn(teacher_model, train_loader, teacher_optimizer, teacher_scheduler, device)
+    #     val_accuracy, val_loss = engine.eval_fn(teacher_model, val_loader, device)
+    #     teachers_train_acc.append(train_accuracy)
+    #     teachers_train_loss.append(train_loss)
+    #     teachers_val_acc.append(val_accuracy)
+    #     teachers_val_loss.append(val_loss)
 
-        print(f'EPOCH -> {epoch+1}/{CONFIG.Epochs} | TEACHERS TRAIN LOSS = {train_loss} | TEACHERS VAL LOSS = {val_loss}')
-        if best_acc < val_accuracy:
-            best_acc = val_accuracy
-            teachers_best_dict = teacher_model.state_dict()
+    #     print(f'EPOCH -> {epoch+1}/{config.Epochs} | TEACHERS TRAIN LOSS = {train_loss} | TEACHERS TRAIN ACC - {train_accuracy*100}% | TEACHERS VAL LOSS = {val_loss} | TEACHER VAL ACC = {val_accuracy*100}%')
+    #     if best_acc < val_accuracy:
+    #         best_acc = val_accuracy
+    #         teachers_best_dict = teacher_model.state_dict()
 
-    torch.save(teachers_best_dict, config.teacher_model_path)
+    # torch.save(teachers_best_dict, config.teacher_model_path)
 
-    print('--------- [INFO] STARTING STUDENTS TRAINING ---------')
-    for epoch in range(CONFIG.Epochs):
-        train_accuracy, train_loss = engine.train_fn(students_model, train_loader, student_optimizer, student_scheduler, device)
-        val_accuracy, val_loss = engine.eval_fn(student_model, val_loader, device)
-        students_train_acc.append(train_accuracy)
-        students_train_loss.append(train_loss)
-        students_val_acc.append(val_accuracy)
-        students_val_loss.append(val_loss)
+    # print('--------- [INFO] STARTING STUDENTS TRAINING ---------')
+    # for epoch in range(config.Epochs):
+    #     train_accuracy, train_loss = engine.train_fn(student_model, train_loader, student_optimizer, student_scheduler, device)
+    #     val_accuracy, val_loss = engine.eval_fn(student_model, val_loader, device)
+    #     students_train_acc.append(train_accuracy)
+    #     students_train_loss.append(train_loss)
+    #     students_val_acc.append(val_accuracy)
+    #     students_val_loss.append(val_loss)
 
-        print(f'EPOCH -> {epoch+1}/{CONFIG.Epochs} | STUDENTS TRAIN LOSS = {train_loss} | STUDENTS VAL LOSS = {val_loss}')
+    #     print(f'EPOCH -> {epoch+1}/{config.Epochs} | STUDENTS TRAIN LOSS = {train_loss} | STUDENTS TRAIN ACC = {train_accuracy*100}% | STUDENTS VAL LOSS = {val_loss} | STUDENTS VAL ACC = {val_accuracy*100}%')
     
     teacher_student_model = TeacherStudentNetwork.TeacherStudentNetwork(
         in_channels=config.in_channels,
@@ -151,7 +149,7 @@ def run():
         num_training_steps=num_training_steps
     )
 
-    teacher_student_best_dict = teacher_student_model.state_dict
+    teacher_student_best_dict = teacher_student_model.student.state_dict()
 
     teacher_student_train_acc = []
     teacher_student_train_loss = []
@@ -159,17 +157,20 @@ def run():
     teacher_student_val_loss = []
 
     print('--------- [INFO] STARTING TEACHER STUDENT TRAINING ---------')
-    for epoch in range(CONFIG.Epochs):
-        train_accuracy, train_loss = engine.train_fn(teacher_student_model, train_loader, teacher_student_optimizer, teacher_student_scheduler, device, "t&s")
+    for epoch in range(config.Epochs):
+        train_accuracy, train_loss = engine.train_fn(teacher_student_model, train_loader, teacher_student_optimizer, teacher_student_scheduler, device, t_n_s=True)
         val_accuracy, val_loss = engine.eval_fn(teacher_student_model, val_loader, device, t_n_s=True)
         teacher_student_train_acc.append(train_accuracy)
         teacher_student_train_loss.append(train_loss)
         teacher_student_val_acc.append(val_accuracy)
         teacher_student_val_loss.append(val_loss)
 
-        print(f'EPOCH -> {epoch+1}/{CONFIG.Epochs} | TEACHER STUDENT TRAIN LOSS = {train_loss} | TEACHER STUDENT VAL LOSS = {val_loss}')
+        print(f'EPOCH -> {epoch+1}/{config.Epochs} | TEACHER STUDENT TRAIN LOSS = {train_loss}  | TEACHER STUDENT TRAIN ACC = {train_accuracy*100}% | TEACHER STUDENT VAL LOSS = {val_loss} | TEACHER STUDENT VAL ACC = {val_accuracy*100}%')
         if best_acc < val_accuracy:
             best_acc = val_accuracy
             teacher_student_best_dict = teacher_student_model.student.state_dict()
 
     torch.save(teacher_student_best_dict, config.student_model_path)
+
+if __name__ == "__main__":
+    run()
