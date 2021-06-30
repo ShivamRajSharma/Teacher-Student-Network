@@ -6,7 +6,7 @@ from tqdm import tqdm
 def cse_loss(student_out, teacher_out):
     student_out = torch.softmax(student_out, dim=-1)
     teacher_out = torch.softmax(teacher_out, dim=-1)
-    return -(teacher_out*torch.log(student_out)).sum(dim=1).mean()
+    return -(teacher_out*torch.log(student_out + 1e-8)).sum(dim=1).mean()
 
 def t_n_s_loss_fn(t_out_1, t_out_2, t_out_4, s_out_1, s_out_2, s_out_4, labels):
     mse_l_1 = nn.MSELoss()(t_out_1, s_out_1)
@@ -14,9 +14,9 @@ def t_n_s_loss_fn(t_out_1, t_out_2, t_out_4, s_out_1, s_out_2, s_out_4, labels):
     if random.random() > 0.5:
         cce_l = nn.CrossEntropyLoss()(s_out_4, labels.view(-1))
     else:
-        # cce_l = cse_loss(s_out_4, t_out_4)
-
-        cce_l = cse_loss(s_out_4, t_out_4)
+        mse_l = cse_loss(s_out_4, t_out_4)
+        cce_l = nn.MSELoss()(s_out_4, t_out_4)
+        cce_l = (cce_l + mse_l)/2
     
     return (mse_l_1 + mse_l_2 + cce_l)/3
 
@@ -25,7 +25,7 @@ def loss_fn(prediction, ground_truth):
 
 def accuracy_fn(out, ground_truth):
     prediction = torch.argmax(torch.softmax(out, dim=-1), dim=-1)
-    return ((prediction == ground_truth)*1.0).sum()/ground_truth.shape[0]
+    return ((prediction.reshape(-1, 1) == ground_truth)*1.0).mean()
     
 
 def train_fn(model, dataloader, optimizer, scheduler, device, t_n_s=False):
@@ -48,7 +48,7 @@ def train_fn(model, dataloader, optimizer, scheduler, device, t_n_s=False):
         running_acc += acc
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        # scheduler.step()
     
     return running_acc/len(dataloader), running_loss/len(dataloader)
 
