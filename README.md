@@ -27,4 +27,28 @@ The Student and teacher were trained on CIFAR100 and CIFAR10 dataset. The datase
 | Student Model | 28.3% |
 | Teacher-Student Model | 33.1% |
 
+2) CIFAR 10
+
+
+| Method  | Accuracy |
+| :---: | :---: |
+| Teacher Model | 87.3% |
+| Student Model | 66.4 |
+| Teacher-Student Model | 73.1% |
+
+
+
+## Extra Info
+<pre>
+1) Trainin Stratergy       : Teacher was trained first, and later used, to supervise the student's training
+2) Optimizer               : Adam optimizer was used with weight decay.
+3) Learning Rate Scheduler : Linear decay scheduler.
+4) Teacher Loss            : Cross-Entropy Loss.
+5) Texcher-Student Loss    : Mixture of Cross-Entropy Loss and KL Divergence
+5) Regularization          : Weight Decay, Dropout, Image Augmentation
+6) Performance Metric      : Accuracy.
+7) Epochs Trained          : 100
+9) Training Time           : 52 minutes.
+</pre>
+
 
