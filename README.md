@@ -20,6 +20,7 @@ The Student and teacher were trained on CIFAR100 and CIFAR10 dataset. The datase
 
 ## Results 
 1) CIFAR 100
+
 | Method  | Accuracy |
 | :---: | :---: |
 | Teacher Model | 54.3% |
