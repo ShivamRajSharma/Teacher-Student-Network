@@ -7,26 +7,22 @@ import transformers
 import torch
 import torch.nn as nn
 import pickle
-from tensorflow.keras.datasets import cifar100
+from tensorflow.keras.datasets import cifar100, cifar10
 import albumentations as alb
-# import torchvision
 from sklearn.model_selection import train_test_split
 
 def run():
-    (x_train, y_train), (x_test, y_test) = cifar100.load_data()
+    (x_train, y_train), (x_test, y_test) = cifar10.load_data()
 
     train_transforms = alb.Compose([
-        alb.Normalize(config.cifar100_mean, config.cifar100_std, max_pixel_value=255.0),
-        # alb.Flip(p=0.2),
-        # alb.Transpose(p=0.2),
-        # alb.ColorJitter(p=0.2),
+        alb.Normalize(config.cifar10_mean, config.cifar10_std, max_pixel_value=255.0),
         alb.Downscale(p=0.2),
         alb.GaussianBlur(p=0.2),
         alb.HorizontalFlip(p=0.2)
     ])
 
     val_transforms = alb.Compose([
-        alb.Normalize(config.cifar100_mean, config.cifar100_std)
+        alb.Normalize(config.cifar10_mean, config.cifar10_std)
     ])
 
     train_data = dataloader.DataLoader(x_train, y_train, train_transforms)
@@ -82,17 +78,17 @@ def run():
 
     teacher_student_scheduler = teacher_scheduler = student_scheduler = None
 
-    # teacher_scheduler = transformers.get_linear_schedule_with_warmup(
-    #     teacher_optimizer,
-    #     num_warmup_steps=config.warmup_stes*num_training_steps,
-    #     num_training_steps=num_training_steps
-    # )
+    teacher_scheduler = transformers.get_linear_schedule_with_warmup(
+        teacher_optimizer,
+        num_warmup_steps=config.warmup_stes*num_training_steps,
+        num_training_steps=num_training_steps
+    )
 
-    # student_scheduler = transformers.get_linear_schedule_with_warmup(
-    #     student_optimizer,
-    #     num_warmup_steps=config.warmup_stes*num_training_steps,
-    #     num_training_steps=num_training_steps
-    # )
+    student_scheduler = transformers.get_linear_schedule_with_warmup(
+        student_optimizer,
+        num_warmup_steps=config.warmup_stes*num_training_steps,
+        num_training_steps=num_training_steps
+    )
 
     best_loss = 1e4
     best_acc = 0.0
@@ -122,8 +118,13 @@ def run():
             best_acc = val_accuracy
             teachers_best_dict = teacher_model.state_dict()
 
+    print("--"*200)
+    print(f"BEST TEACHER ACCURACY IS {best_acc*100}%")
+    
+
     torch.save(teachers_best_dict, config.teacher_model_path)
 
+    best_acc = 0.0
     print('--------- [INFO] STARTING STUDENTS TRAINING ---------\n')
     for epoch in range(config.Epochs):
         train_accuracy, train_loss = engine.train_fn(student_model, train_loader, student_optimizer, student_scheduler, device)
@@ -132,9 +133,15 @@ def run():
         students_train_loss.append(train_loss)
         students_val_acc.append(val_accuracy)
         students_val_loss.append(val_loss)
+        if best_acc < val_accuracy:
+            best_acc = val_accuracy
 
         print(f'EPOCH -> {epoch+1}/{config.Epochs} | STUDENTS TRAIN LOSS = {train_loss} | STUDENTS TRAIN ACC = {train_accuracy*100}% | STUDENTS VAL LOSS = {val_loss} | STUDENTS VAL ACC = {val_accuracy*100}%\n')
+
     
+    print("--"*200)
+    print(f"BEST TEACHER ACCURACY IS {best_acc*100}%")
+
     teacher_student_model = TeacherStudentNetwork.TeacherStudentNetwork(
         in_channels=config.in_channels,
         out_channels=config.out_channels,
@@ -142,7 +149,6 @@ def run():
         teacher_weights_path=config.teacher_model_path,
         num_classes=config.num_classes,
         dropout=config.dropout,
-        teachers_input_student_ratio=config.teachers_input_student_ratio,
     )
 
     teacher_student_model.to(device)
@@ -150,11 +156,11 @@ def run():
     teacher_student_optimizer = transformers.AdamW(teacher_student_model.parameters(), lr=config.lr)
 
 
-    # teacher_student_scheduler = transformers.get_linear_schedule_with_warmup(
-    #     teacher_student_optimizer,
-    #     num_warmup_steps=config.warmup_stes*num_training_steps,
-    #     num_training_steps=num_training_steps
-    # )
+    teacher_student_scheduler = transformers.get_linear_schedule_with_warmup(
+        teacher_student_optimizer,
+        num_warmup_steps=config.warmup_stes*num_training_steps,
+        num_training_steps=num_training_steps
+    )
 
     teacher_student_best_dict = teacher_student_model.student.state_dict()
 
@@ -165,8 +171,26 @@ def run():
 
     print('--------- [INFO] STARTING TEACHER STUDENT TRAINING --------- \n')
     for epoch in range(config.Epochs):
-        train_accuracy, train_loss = engine.train_fn(teacher_student_model, train_loader, teacher_student_optimizer, teacher_student_scheduler, device, t_n_s=True)
-        val_accuracy, val_loss = engine.eval_fn(teacher_student_model, val_loader, device, t_n_s=True)
+        
+        train_accuracy, train_loss = engine.train_fn(
+            teacher_student_model, 
+            train_loader, 
+            teacher_student_optimizer, 
+            teacher_student_scheduler, 
+            device, 
+            t_n_s=True, 
+            include_t_n_s_mid_loss=config.include_t_n_s_mid_loss, 
+            teachers_input_student_ratio=config.teachers_input_student_ratio
+        )
+
+        val_accuracy, val_loss = engine.eval_fn(
+            teacher_student_model, 
+            val_loader, 
+            device, 
+            t_n_s=True,
+            include_t_n_s_mid_loss=config.include_t_n_s_mid_loss
+        )
+
         teacher_student_train_acc.append(train_accuracy)
         teacher_student_train_loss.append(train_loss)
         teacher_student_val_acc.append(val_accuracy)
@@ -176,6 +200,10 @@ def run():
         if best_acc < val_accuracy:
             best_acc = val_accuracy
             teacher_student_best_dict = teacher_student_model.student.state_dict()
+    
+    print("--"*200)
+        
+    print(f"BEST TEACHER STUDENT ACCURACY IS {best_acc*100}%")
 
     torch.save(teacher_student_best_dict, config.student_model_path)
 

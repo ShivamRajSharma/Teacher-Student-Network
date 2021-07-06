@@ -46,7 +46,7 @@ class Teacher(nn.Module):
 
 
 class Student(nn.Module):
-    def __init__(self, in_channels, out_channels, num_classes, dropout, teachers_input_student_ratio=-1):
+    def __init__(self, in_channels, out_channels, num_classes, dropout):
         super(Student, self).__init__()
         self.conv_1 = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
@@ -66,17 +66,21 @@ class Student(nn.Module):
             nn.Linear(30, num_classes)
         )
 
-        self.teachers_input_student_ratio = teachers_input_student_ratio
     
-    def forward(self, x, teacher_out_1=None, teacher_out_2=None):
+    def forward(self, x, teacher_out_1=None, teacher_out_2=None, teachers_input_student_ratio=10):
         out_1 = self.conv_1(x)
 
-        if (teacher_out_1 is not None) and (random.random() > self.teachers_input_student_ratio):
+        if random.random() > 0.5:
+            teacher_out_2 = None
+        else:
+            teacher_out_1 = None
+
+        if (teacher_out_1 is not None) and (random.random() > teachers_input_student_ratio):
             out_2 = self.conv_2(teacher_out_1.detach())
         else:
             out_2 = self.conv_2(out_1)
         
-        if (teacher_out_2 is not None) and (random.random() > self.teachers_input_student_ratio):
+        if (teacher_out_2 is not None) and (random.random() > teachers_input_student_ratio):
             out_3 = torch.mean(teacher_out_2.detach(), dim=(2, 3))
         else:
             out_3 = torch.mean(out_2, dim=(2, 3))
@@ -95,7 +99,7 @@ class TeacherStudentNetwork(nn.Module):
         teacher_num_conv,
         teacher_weights_path,
         num_classes,
-        dropout
+        dropout,
     ):
         super(TeacherStudentNetwork, self).__init__()
         self.teacher =  Teacher(
@@ -111,16 +115,14 @@ class TeacherStudentNetwork(nn.Module):
             out_channels=out_channels,
             num_classes=num_classes,
             dropout=dropout,
-            teachers_input_student_ratio=teachers_input_student_ratio
         )
         
         self.teacher.load_state_dict(torch.load(teacher_weights_path))
 
-    def forward(self, x):
-        self.teacher.eval()
+    def forward(self, x, teachers_input_student_ratio=10):
         with torch.no_grad():
             t_out_1, t_out_2, t_out_3, t_out_4 = self.teacher(x)
-        s_out_1, s_out_2, s_out_3, s_out_4 = self.student(x,  t_out_1, t_out_2)
+        s_out_1, s_out_2, s_out_3, s_out_4 = self.student(x, t_out_1, t_out_2, teachers_input_student_ratio)
         return (
             [t_out_1.detach(), t_out_2.detach(), t_out_3.detach(), t_out_4.detach()],
             [s_out_1, s_out_2, s_out_3, s_out_4]
